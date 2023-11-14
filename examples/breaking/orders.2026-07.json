@@ -1,0 +1,12 @@
+{
+  "manifestVersion": "1",
+  "dataset": "orders",
+  "version": "2026-07",
+  "sourceFormat": "csv",
+  "columns": [
+    { "name": "placed_on", "type": "date", "nullable": false, "hasDefault": false },
+    { "name": "order_id", "type": "int32", "nullable": false, "hasDefault": false },
+    { "name": "net_amount", "type": "decimal(12,2)", "nullable": false, "unit": "USD", "hasDefault": false },
+    { "name": "note", "type": "varchar(120)", "nullable": false, "hasDefault": true }
+  ]
+}
