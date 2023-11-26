@@ -88,7 +88,9 @@ would be a finding raised on correct input.
 ## Ordering
 
 Findings sort by `(location.file, location.pointer, ruleId)`, compared by UTF-16
-code unit. That means `Z.json` precedes `a.json` and `/columns/10` precedes
+code unit. The one exception is `too-many-findings`, which is appended after the
+sort rather than placed within it: it is a statement about the list, not an entry
+in it. That means `Z.json` precedes `a.json` and `/columns/10` precedes
 `/columns/2`. Both are deliberate: collation depends on ICU data that differs
 between Node builds, and a report that two machines order differently is a
 report nobody can diff.

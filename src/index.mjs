@@ -472,14 +472,18 @@ function validateManifest(document, file, limits) {
         })
       }
     }
-    let usable = true
+    // Any problem at all means this column is not indexed. The flag this
+    // replaces had to be set at six separate sites, and forgetting one would
+    // put a column the tool could not read into the index under a name it is
+    // not sure of -- where a later duplicate of that name would then be
+    // reported twice over.
+    const problemsBefore = problems.length
     if (!isUsableText(raw.name, limits.maxFieldLength)) {
       add({
         ruleId: 'column-invalid',
         pointer: `${pointer}/name`,
         message: `a column name must be a non-empty string of at most ${limits.maxFieldLength} characters that is still non-empty once control characters are removed`,
       })
-      usable = false
     }
     if (!isUsableText(raw.type, limits.maxFieldLength)) {
       add({
@@ -487,7 +491,6 @@ function validateManifest(document, file, limits) {
         pointer: `${pointer}/type`,
         message: `a column type must be a non-empty string of at most ${limits.maxFieldLength} characters that is still non-empty once control characters are removed`,
       })
-      usable = false
     }
     if (typeof raw.nullable !== 'boolean') {
       // Nullability is half of what this tool classifies. Defaulting an absent
@@ -498,7 +501,6 @@ function validateManifest(document, file, limits) {
         pointer: `${pointer}/nullable`,
         message: 'nullable must be declared as true or false; this tool does not assume one',
       })
-      usable = false
     }
     if (raw.unit !== undefined && !isUsableText(raw.unit, limits.maxFieldLength)) {
       add({
@@ -506,17 +508,14 @@ function validateManifest(document, file, limits) {
         pointer: `${pointer}/unit`,
         message: `unit, when present, must be a non-empty string of at most ${limits.maxFieldLength} characters that survives sanitising`,
       })
-      usable = false
     }
     if (raw.hasDefault !== undefined && typeof raw.hasDefault !== 'boolean') {
       add({ ruleId: 'column-invalid', pointer: `${pointer}/hasDefault`, message: 'hasDefault, when present, must be true or false' })
-      usable = false
     }
     if (raw.description !== undefined && !isUsableText(raw.description, limits.maxFieldLength)) {
       add({ ruleId: 'column-invalid', pointer: `${pointer}/description`, message: `description, when present, must be a string of at most ${limits.maxFieldLength} characters that survives sanitising` })
-      usable = false
     }
-    if (!usable) continue
+    if (problems.length > problemsBefore) continue
 
     if (index.has(raw.name)) {
       // A duplicate name makes the by-name index ambiguous. Keeping the last

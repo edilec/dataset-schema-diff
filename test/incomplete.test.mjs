@@ -125,6 +125,22 @@ test('a duplicate column name makes the comparison ambiguous, and no addition is
   assert.equal(report.findings.filter((item) => item.ruleId.startsWith('column-added')).length, 0)
 })
 
+test('a column the tool could not read is not put into the index under its name', async () => {
+  // The first entry is unreadable (no nullable), the second is a valid column
+  // with the same name. Indexing the unreadable one would make the second look
+  // like a duplicate, and the report would carry a second finding about a
+  // problem the manifest does not have.
+  const documents = await twoManifests(
+    manifestDoc({ columns: [{ name: 'a', type: 'int32' }, column({ name: 'a' })] }),
+    manifestDoc(),
+  )
+  const report = await diffSchemas(documents)
+
+  assert.deepEqual(report.findings.map((item) => item.ruleId), ['column-nullability-undeclared'])
+  assert.equal(report.findings.filter((item) => item.ruleId === 'column-name-duplicate').length, 0)
+  assert.equal(report.status, 'incomplete')
+})
+
 test('a manifest that could not be read produces no claim about the other manifest', async () => {
   const root = await makeRoot()
   await writeDocument(root, 'after.json', manifestDoc({ columns: [column({ name: 'a' }), column({ name: 'b' })] }))
