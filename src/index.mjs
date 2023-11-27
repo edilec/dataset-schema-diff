@@ -462,6 +462,13 @@ function validateManifest(document, file, limits) {
       add({ ruleId: 'column-invalid', pointer, message: 'a column entry must be a JSON object' })
       continue
     }
+    // Any problem at all means this column is not indexed -- including an
+    // unknown field, which is a column this tool cannot claim to have read. The
+    // flag this replaces had to be set at six separate sites, and forgetting
+    // one would put a column the tool could not read into the index under a
+    // name it is not sure of, where a later duplicate of that name would then
+    // be reported twice over.
+    const problemsBefore = problems.length
     for (const key of Object.keys(raw)) {
       if (!COLUMN_FIELDS.includes(key)) {
         add({
@@ -472,12 +479,6 @@ function validateManifest(document, file, limits) {
         })
       }
     }
-    // Any problem at all means this column is not indexed. The flag this
-    // replaces had to be set at six separate sites, and forgetting one would
-    // put a column the tool could not read into the index under a name it is
-    // not sure of -- where a later duplicate of that name would then be
-    // reported twice over.
-    const problemsBefore = problems.length
     if (!isUsableText(raw.name, limits.maxFieldLength)) {
       add({
         ruleId: 'column-invalid',
