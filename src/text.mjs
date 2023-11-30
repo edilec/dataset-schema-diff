@@ -128,10 +128,58 @@ export function excerpt(value, limit = EXCERPT_LIMIT) {
   return `${flattened.slice(0, limit)}...`
 }
 
-/** True when a string carries any character the report may not reproduce. */
-export function hasForbiddenCharacter(value) {
-  CONTROL.lastIndex = 0
-  return CONTROL.test(renderable(value))
+/**
+ * How two values relate once they are rendered the way the report shows them.
+ *
+ * Three answers, and the middle one is the reason this function exists:
+ *
+ * - `same` -- the two are the same text.
+ * - `different` -- the two are different text and a reader can see that they
+ *   are, because `excerpt` keeps the characters they differ in.
+ * - `stripped-only` -- the two are NOT the same text, and `excerpt` renders
+ *   them identically, because every character they differ in is one this
+ *   report removes: a trailing space, a NEL, a bidi mark.
+ *
+ * A caller that compares the RAW values and then renders them writes
+ * `changed unit from kWh to kWh` in the third case, at error severity, with
+ * `kWh -> kWh` as its evidence: a sentence its own evidence contradicts, and
+ * one nobody can act on. The contract's "validate what you will render" table
+ * names this exact gap -- the `trim()` versus `sanitize()` row -- and a plain
+ * trailing space is enough to reach it. So the comparison is made HERE, on the
+ * rendered form, and the third answer is reported as what it is: a real
+ * difference this report cannot show, not a change of value.
+ *
+ * `limit` is the field bound, not a display width. Every value compared through
+ * here has already been held to that bound by `isUsableText`, so the rendering
+ * truncates nothing and `stripped-only` always means stripped characters, never
+ * two different values sharing a prefix.
+ */
+export function compareAsRendered(left, right, limit) {
+  if (left === right) return 'same'
+  return excerpt(left, limit) === excerpt(right, limit) ? 'stripped-only' : 'different'
+}
+
+/** A code point named as `U+XXXX`, which is safe to print for any character. */
+function nameCharacter(character) {
+  if (character === undefined) return 'the end of the value'
+  return `U+${character.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`
+}
+
+/**
+ * Where two strings first differ, named by code point.
+ *
+ * This is what a report can honestly say about a difference it cannot show. It
+ * names one position and one code point from each side -- never a span of
+ * either document -- so it stays bounded and reproduces nothing, and a reader
+ * gets the one fact that makes the difference actionable: which character it is
+ * and where. Iteration is by code point, so an astral character counts once.
+ */
+export function describeCharacterDifference(left, right) {
+  const before = [...renderable(left)]
+  const after = [...renderable(right)]
+  let at = 0
+  while (at < before.length && at < after.length && before[at] === after[at]) at += 1
+  return `at character ${at + 1}: before ${nameCharacter(before[at])}, after ${nameCharacter(after[at])}`
 }
 
 /**
@@ -187,9 +235,10 @@ function describeParseFailure(message) {
  * Describe a JSON parse failure without reproducing the document.
  *
  * V8 reports a parse failure two ways and one of them quotes the input it
- * choked on: `Unexpected token 'A', "AKIAIOSFODNN7EXAMPLE" is not valid JSON`,
- * or a ten-character prefix followed by `"..."`. A document short enough to be
- * only a credential is therefore reproduced in full by its own error message,
+ * choked on -- `Unexpected token`, the offending character, then a span of the
+ * document itself in double quotes, either whole or as a ten-character prefix
+ * followed by an ellipsis. A document short enough to be only an access key is
+ * therefore reproduced in full by its own error message,
  * and truncating the front does not help: the quoted window is taken from
  * wherever the offence is, not from the start.
  *
