@@ -42,6 +42,26 @@ a `*-default-unknown` rule and an `incomplete` run. In the direction it does not
 need, nothing is reported: asking for a fact that cannot change the verdict
 would be a finding raised on correct input.
 
+## Two values that read the same
+
+`excerpt` removes C0, DEL, C1, the line and paragraph separators and the bidi
+controls, then collapses whitespace runs and trims. So two values can be
+different text and reach a reader as the same characters — `"kWh"` and
+`"kWh "` are the emblem, and no control character is needed.
+
+Every comparison here is made on the rendered form, and a pair that is not the
+same text but renders identically gets `stripped-character-difference`: the
+message names where they differ by code point, and the run is `incomplete`
+because whether that character is significant is a fact about the producer that
+the documents do not carry. Comparing the raw strings and rendering the message
+instead is what produces `changed unit from kWh to kWh` at error severity, which
+is the contract's `trim()`-versus-`sanitize()` row arriving in a report.
+
+The comparison sites, all of them: `dataset`, each column `name` (which is also
+the index key), each column `type` (after normalising), and each column `unit`.
+`sourceFormat` needs none — it is held to a closed vocabulary, so two accepted
+values differ or they do not.
+
 ## Rules
 
 | Rule | Severity | Makes the run incomplete | What it means |
@@ -74,6 +94,7 @@ would be a finding raised on correct input.
 | `path-escapes-root` | error | yes | An input path resolves outside `--root`, lexically or through a symbolic link. It was not read. |
 | `source-format-changed-breaking` | error | no | The declared source format changed. Every reader has to change, whatever the columns do. |
 | `source-format-unsupported` | error | yes | A manifest declares a source format this tool has not been taught. Nothing about it is guessed. |
+| `stripped-character-difference` | error | yes | Two values are not the same text and this report renders them identically, so what changed can be neither shown nor classified. |
 | `too-many-columns` | error | yes | A manifest declares more columns than `--max-columns`. None were examined. |
 | `too-many-findings` | error | yes | More findings were produced than `--max-findings`. The list is truncated and says so. |
 | `type-change-unclassified` | error | yes | A type changed and the declared lattice relates neither type to the other, in either direction. |

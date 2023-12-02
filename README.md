@@ -167,6 +167,50 @@ ignored, because a one-character typo must not turn a real failure into a green
 run. A policy is configuration, so a policy that cannot be read is a
 configuration error — empty `stdout`, exit 2 — and not a report.
 
+## Two values that read the same
+
+Every comparison in this tool asks how the two values will be **rendered in this
+report**, not whether the raw strings are equal. The difference matters for one
+case, and a plain trailing space is enough to reach it:
+
+```
+before.json  { "name": "energy", "unit": "kWh" }
+after.json   { "name": "energy", "unit": "kWh " }
+```
+
+Comparing the raw strings and then rendering them produces
+
+```
+ERROR  unit-changed-breaking  after.json/columns/1
+       column "energy" changed unit from kWh to kWh; the numbers mean
+       something else now
+       evidence: "kWh -> kWh"
+```
+
+— an error-severity finding whose own evidence contradicts it, and one nobody
+can act on. What this tool reports instead names the difference by code point
+and says what it could not decide:
+
+```
+ERROR  stripped-character-difference  after.json/columns/1/unit
+       the column unit reads "kWh" in both manifests and the two are not the
+       same text: they differ only in characters this report strips (at
+       character 4: before the end of the value, after U+0020), so this tool
+       cannot say what changed
+```
+
+The run is `incomplete` (exit 2) rather than a fail, because whether a trailing
+space in an export is significant is a fact about the producer: a reader that
+matches column names byte for byte and a reader that trims will disagree about
+whether anything changed at all. Calling it breaking would assert one of those
+answers and staying silent would assert the other.
+
+The same rule applies to the **column name**, which is why two names that render
+identically are matched as one column and reported once, rather than as an
+addition and a removal of what reads as the same column. Where two columns in
+**one** manifest render identically, the manifest is ambiguous and
+`column-name-duplicate` says so.
+
 ## Rules
 
 | Rule | Severity | Makes the run incomplete | What it means |
@@ -199,6 +243,7 @@ configuration error — empty `stdout`, exit 2 — and not a report.
 | `path-escapes-root` | error | yes | An input path resolves outside `--root`. |
 | `source-format-changed-breaking` | error | no | The declared source format changed. |
 | `source-format-unsupported` | error | yes | A manifest declares a source format this tool has not been taught. |
+| `stripped-character-difference` | error | yes | Two values are not the same text and this report renders them identically, so what changed cannot be shown or classified. |
 | `too-many-columns` | error | yes | A manifest is over `--max-columns`, so none of its columns were examined. |
 | `too-many-findings` | error | yes | The report is over `--max-findings` and was truncated. |
 | `type-change-unclassified` | error | yes | A type changed and the lattice relates neither type to the other. |

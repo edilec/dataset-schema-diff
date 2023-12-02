@@ -16,7 +16,8 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, resolve, sep } from 'node:path'
 
 import {
-  byCodeUnit, decodeUtf8, excerpt, isPlainObject, isUsableText, parseFailureDetail,
+  byCodeUnit, compareAsRendered, decodeUtf8, describeCharacterDifference,
+  excerpt, isPlainObject, isUsableText, parseFailureDetail,
 } from './text.mjs'
 import { classifyTypeChange, normaliseType } from './types.mjs'
 
@@ -106,6 +107,7 @@ const RULE_SEVERITY = Object.freeze({
   'path-escapes-root': 'error',
   'source-format-changed-breaking': 'error',
   'source-format-unsupported': 'error',
+  'stripped-character-difference': 'error',
   'too-many-columns': 'error',
   'too-many-findings': 'error',
   'type-change-unclassified': 'error',
@@ -144,6 +146,7 @@ const INCOMPLETE_RULES = Object.freeze(new Set([
   'no-columns-declared',
   'path-escapes-root',
   'source-format-unsupported',
+  'stripped-character-difference',
   'too-many-columns',
   'too-many-findings',
   'type-change-unclassified',
@@ -518,19 +521,30 @@ function validateManifest(document, file, limits) {
     }
     if (problems.length > problemsBefore) continue
 
-    if (index.has(raw.name)) {
+    // The index is keyed by the name AS THIS REPORT RENDERS IT, not by the raw
+    // string. Two names that differ only in characters `excerpt` strips are one
+    // name to every reader of the report, and keying by the raw string made
+    // such a pair report an addition AND a removal of what reads as the same
+    // column -- two findings, one of them error severity, contradicting each
+    // other on the page. The raw name is kept beside the key so the difference
+    // itself can still be reported.
+    const key = excerpt(raw.name, limits.maxFieldLength)
+    if (index.has(key)) {
       // A duplicate name makes the by-name index ambiguous. Keeping the last
       // entry would silently drop the first and then compare against a schema
-      // this manifest does not describe.
+      // this manifest does not describe. Two names that render the same are
+      // ambiguous in exactly the same way: nothing in the report could tell a
+      // reader which of the two a finding is about.
       add({
         ruleId: 'column-name-duplicate',
         pointer,
-        message: `the column name ${JSON.stringify(excerpt(raw.name, 60))} is declared more than once, so a comparison by name is ambiguous`,
+        message: `the column name ${JSON.stringify(excerpt(raw.name, 60))} is declared more than once, or is declared twice in forms this report renders identically, so a comparison by name is ambiguous`,
       })
       continue
     }
-    index.set(raw.name, {
-      name: raw.name,
+    index.set(key, {
+      name: key,
+      declaredName: raw.name,
       type: raw.type,
       nullable: raw.nullable,
       unit: raw.unit,
@@ -557,6 +571,34 @@ function verdictFor(mode, backwardSafe, forwardSafe) {
   return needed.every(Boolean) ? 'compatible' : 'breaking'
 }
 
+/**
+ * The finding for two values that are not the same text and that this report
+ * renders identically.
+ *
+ * It is a real difference -- somebody wrote two different strings -- and it is
+ * one this report cannot show, so the message names the characters they differ
+ * in by code point instead of printing the two renderings side by side and
+ * asserting a change between two things that read the same.
+ *
+ * The run is `incomplete` rather than a fail, because what the difference MEANS
+ * is exactly what this tool cannot tell: whether a trailing space in an export
+ * is significant is a fact about the producer, and a reader that matches column
+ * names byte for byte and a reader that trims will disagree about whether
+ * anything changed at all. Reporting it as a breaking change would assert one
+ * of those answers; staying silent would assert the other.
+ */
+function strippedDifference({ file, pointer, what, shown, left, right }) {
+  const difference = describeCharacterDifference(left, right)
+  return finding({
+    ruleId: 'stripped-character-difference',
+    file,
+    pointer,
+    message: `${what} reads ${JSON.stringify(excerpt(shown, 60))} in both manifests and the two are not the same text: they differ only in characters this report strips (${difference}), so this tool cannot say what changed`,
+    evidence: difference,
+    suggestion: 'make the two declarations identical, or remove the stray character from the one that carries it',
+  })
+}
+
 function describeColumn(column) {
   const unit = column.unit === undefined ? '' : `, unit ${excerpt(column.unit, 40)}`
   return `${excerpt(column.type, 60)}, ${column.nullable ? 'nullable' : 'required'}${unit}`
@@ -569,7 +611,7 @@ function describeColumn(column) {
  * `ok` only because nothing was dropped from either. That is what lets an
  * addition or a removal be asserted positively here.
  */
-function compareManifests(before, after, files, policy) {
+function compareManifests(before, after, files, policy, limits) {
   const findings = []
   const counts = {
     columnsAdded: 0, columnsRemoved: 0, columnsMatched: 0,
@@ -577,7 +619,21 @@ function compareManifests(before, after, files, policy) {
   }
   const mode = policy.compatibility
 
-  if (before.document.dataset !== after.document.dataset) {
+  // Every comparison below asks `compareAsRendered`, never `!==` on the raw
+  // strings, so no finding here can assert that a value changed from X to X.
+  // `sourceFormat` is the one exception and it needs none: it is validated
+  // against a closed vocabulary, so two accepted values differ or they do not.
+  const datasets = compareAsRendered(before.document.dataset, after.document.dataset, limits.maxFieldLength)
+  if (datasets === 'stripped-only') {
+    findings.push(strippedDifference({
+      file: files.after,
+      pointer: '/dataset',
+      what: 'the dataset name',
+      shown: after.document.dataset,
+      left: before.document.dataset,
+      right: after.document.dataset,
+    }))
+  } else if (datasets === 'different') {
     findings.push(finding({
       ruleId: 'dataset-mismatch',
       file: files.after,
@@ -642,10 +698,38 @@ function compareManifests(before, after, files, policy) {
     counts.columnsMatched += 1
     const pointer = `/columns/${now.position}`
 
+    // The two entries matched on the RENDERED name; when the declared names are
+    // not the same text, that difference is the finding.
+    if (old.declaredName !== now.declaredName) {
+      findings.push(strippedDifference({
+        file: files.after,
+        pointer: `${pointer}/name`,
+        what: 'the column name',
+        shown: name,
+        left: old.declaredName,
+        right: now.declaredName,
+      }))
+    }
+
     const typeChange = classifyTypeChange(old.type, now.type)
     if (typeChange !== 'same') {
       counts.typeChanges += 1
-      if (typeChange === 'unclassified') {
+      const types = compareAsRendered(normaliseType(old.type), normaliseType(now.type), limits.maxFieldLength)
+      if (types === 'stripped-only') {
+        // normaliseType folds case and the whitespace around parameters, so two
+        // types reaching here differ in characters it keeps and `excerpt`
+        // removes -- a C1 or bidi character. Without this branch the pair falls
+        // through to `unclassified`, whose message would read "changed type
+        // from int32 to int32, and the lattice relates neither to the other".
+        findings.push(strippedDifference({
+          file: files.after,
+          pointer: `${pointer}/type`,
+          what: 'the column type',
+          shown: normaliseType(now.type),
+          left: normaliseType(old.type),
+          right: normaliseType(now.type),
+        }))
+      } else if (typeChange === 'unclassified') {
         findings.push(finding({
           ruleId: 'type-change-unclassified',
           file: files.after,
@@ -683,9 +767,21 @@ function compareManifests(before, after, files, policy) {
       }))
     }
 
-    if (old.unit !== now.unit) {
+    const units = old.unit === undefined || now.unit === undefined
+      ? (old.unit === now.unit ? 'same' : 'different')
+      : compareAsRendered(old.unit, now.unit, limits.maxFieldLength)
+    if (units !== 'same') {
       counts.unitChanges += 1
-      if (old.unit !== undefined && now.unit !== undefined) {
+      if (units === 'stripped-only') {
+        findings.push(strippedDifference({
+          file: files.after,
+          pointer: `${pointer}/unit`,
+          what: 'the column unit',
+          shown: now.unit,
+          left: old.unit,
+          right: now.unit,
+        }))
+      } else if (old.unit !== undefined && now.unit !== undefined) {
         findings.push(finding({
           ruleId: 'unit-changed-breaking',
           file: files.after,
@@ -786,7 +882,7 @@ export async function diffSchemas(options = {}) {
     diffAttempted = true
     columnsBefore = validated.before.order.length
     columnsAfter = validated.after.order.length
-    const comparison = compareManifests(validated.before, validated.after, files, policy)
+    const comparison = compareManifests(validated.before, validated.after, files, policy, limits)
     findings.push(...comparison.findings)
     counts = comparison.counts
     orderChanged = comparison.orderChanged

@@ -22,9 +22,15 @@ is recorded here.
   `ignore`, `warn` or `breaking`. `ignore` suppresses the finding and never the
   fact: `summary.columnOrderChanged` is reported either way.
 - Declared units compared, with a changed unit breaking under every mode.
+- Every comparison made on the value as this report renders it, not on the raw
+  string. Two values that are not the same text and that render identically --
+  a trailing space is enough -- are reported as
+  `stripped-character-difference`, which names the differing code point and
+  makes the run `incomplete`, instead of asserting that a value changed from X
+  to X.
 - Bounds on document bytes, columns, field length and findings, each enforced
   before the work it bounds.
 - Input paths confined to `--root`, by lexical check and by resolved real path,
   so a symbolic link out of the root is refused.
-- A 38-rule catalogue with one frozen severity table, documented in
+- A 39-rule catalogue with one frozen severity table, documented in
   `docs/rules.md` and in the README.

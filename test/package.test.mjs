@@ -72,6 +72,15 @@ for (const document of ['README.md', 'docs/rules.md']) {
   })
 }
 
+test('the CHANGELOG states the size of the catalogue the code can emit', async () => {
+  // The count is a claim about the code, so it is checked against the code. It
+  // was written once and then went stale the first time a rule was added.
+  const changelog = await readProjectFile('CHANGELOG.md')
+  const stated = /A (\d+)-rule catalogue/.exec(changelog)
+  assert.ok(stated !== null, 'the CHANGELOG does not state a catalogue size')
+  assert.equal(Number(stated[1]), RULE_CATALOG.length)
+})
+
 test('the README states the limits the code actually enforces', async () => {
   const readme = await readProjectFile('README.md')
   const documented = Object.fromEntries(
