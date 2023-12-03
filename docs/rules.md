@@ -69,6 +69,7 @@ values differ or they do not.
 | `column-added-breaking` | error | no | A column was added and the declared policy cannot absorb it. |
 | `column-added-compatible` | info | no | A column was added and the declared policy absorbs it. |
 | `column-added-default-unknown` | error | yes | A required column was added and the manifest does not say whether it has a default, so the verdict the policy needs cannot be reached. |
+| `column-default-changed` | warning | no | `hasDefault` changed on a column present in both manifests. No reader direction changes today; whether removing that column later is compatible does. |
 | `column-invalid` | error | yes | A column entry is not an object, or a required field is missing, mistyped, over `--max-field-length`, or renders empty once control characters are removed. |
 | `column-name-duplicate` | error | yes | One manifest declares a column name twice, so a comparison by name is ambiguous. No diff is attempted. |
 | `column-nullability-undeclared` | error | yes | A column does not declare `nullable`. The tool does not assume a value for it. |

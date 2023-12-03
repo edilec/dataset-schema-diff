@@ -22,6 +22,10 @@ is recorded here.
   `ignore`, `warn` or `breaking`. `ignore` suppresses the finding and never the
   fact: `summary.columnOrderChanged` is reported either way.
 - Declared units compared, with a changed unit breaking under every mode.
+- `hasDefault` compared on a column present in both manifests, as
+  `column-default-changed`. It changes no verdict in that comparison and it
+  decides whether a later removal of the same column is compatible or
+  breaking.
 - Every comparison made on the value as this report renders it, not on the raw
   string. Two values that are not the same text and that render identically --
   a trailing space is enough -- are reported as
@@ -32,5 +36,5 @@ is recorded here.
   before the work it bounds.
 - Input paths confined to `--root`, by lexical check and by resolved real path,
   so a symbolic link out of the root is refused.
-- A 39-rule catalogue with one frozen severity table, documented in
+- A 40-rule catalogue with one frozen severity table, documented in
   `docs/rules.md` and in the README.

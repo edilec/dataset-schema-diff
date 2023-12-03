@@ -86,7 +86,7 @@ parser. `stderr` carries the human summary; `--json` silences it.
 | `columns[].name` | yes | Compared case-sensitively. |
 | `columns[].type` | yes | From the vocabulary below, or anything else — see *unknown types*. |
 | `columns[].nullable` | yes | `true` or `false`. Never assumed. |
-| `columns[].hasDefault` | no | Whether a reader has a value to use when the column is absent. |
+| `columns[].hasDefault` | no | Whether a reader has a value to use when the column is absent. Compared on a matched column too, because it decides whether removing that column later is compatible. |
 | `columns[].unit` | no | A declared unit for the values. |
 | `columns[].description` | no | Ignored by the comparison. |
 
@@ -218,6 +218,7 @@ addition and a removal of what reads as the same column. Where two columns in
 | `column-added-breaking` | error | no | A column was added and the declared policy cannot absorb it. |
 | `column-added-compatible` | info | no | A column was added and the declared policy absorbs it. |
 | `column-added-default-unknown` | error | yes | A required column was added and the manifest does not say whether it has a default. |
+| `column-default-changed` | warning | no | `hasDefault` changed on a column present in both manifests. |
 | `column-invalid` | error | yes | A column entry is unusable: not an object, a missing or mistyped field, over `--max-field-length`, or a value that renders empty. |
 | `column-name-duplicate` | error | yes | A column name is declared twice, so a comparison by name is ambiguous. |
 | `column-nullability-undeclared` | error | yes | A column does not declare `nullable`. |
@@ -296,6 +297,7 @@ extra fields:
 | `policy` | The effective compatibility and column-order modes, so the report says what it was judged against. |
 | `columnsBefore` / `columnsAfter` / `columnsMatched` / `columnsAdded` / `columnsRemoved` | Counts over the two column sets. |
 | `typeChanges` / `nullabilityChanges` / `unitChanges` | Counts of changes found, including ones that could not be classified. |
+| `defaultChanges` | How many matched columns changed `hasDefault`. |
 | `columnOrderChanged` | Reported whatever `--column-order` says. |
 | `columnsWithoutDeclaredUnit` | How many columns in the newer manifest declare no unit at all, so silence about units is not read as verification. |
 

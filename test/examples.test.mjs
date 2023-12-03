@@ -43,6 +43,10 @@ test('the failing example exits 1 and names every breaking change in it', async 
   const report = JSON.parse(run.stdout)
   assert.equal(report.status, 'fail')
   assert.deepEqual(report.findings.map((item) => item.ruleId).sort(), [
+    // `note` gained a declared default in this example. It changes no verdict
+    // here and it decides whether a later removal of `note` is compatible, so
+    // it is reported rather than dropped.
+    'column-default-changed',
     'column-order-changed-breaking',
     'nullability-tightened-breaking',
     'type-narrowed-breaking',
@@ -65,6 +69,7 @@ test('the same documents get other verdicts under another policy, and the unit c
   assert.equal(run.code, 1, 'the changed unit breaks under every mode')
   const report = JSON.parse(run.stdout)
   assert.deepEqual(report.findings.map((item) => item.ruleId).sort(), [
+    'column-default-changed',
     'nullability-tightened-compatible',
     'type-narrowed-compatible',
     'unit-changed-breaking',

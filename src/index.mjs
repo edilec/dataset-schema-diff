@@ -82,6 +82,7 @@ const RULE_SEVERITY = Object.freeze({
   'column-added-breaking': 'error',
   'column-added-compatible': 'info',
   'column-added-default-unknown': 'error',
+  'column-default-changed': 'warning',
   'column-invalid': 'error',
   'column-name-duplicate': 'error',
   'column-nullability-undeclared': 'error',
@@ -599,6 +600,9 @@ function strippedDifference({ file, pointer, what, shown, left, right }) {
   })
 }
 
+/** `hasDefault` is optional, so "not declared" is one of its three states. */
+const describeDefault = (value) => (value === undefined ? 'not declared' : String(value))
+
 function describeColumn(column) {
   const unit = column.unit === undefined ? '' : `, unit ${excerpt(column.unit, 40)}`
   return `${excerpt(column.type, 60)}, ${column.nullable ? 'nullable' : 'required'}${unit}`
@@ -615,7 +619,7 @@ function compareManifests(before, after, files, policy, limits) {
   const findings = []
   const counts = {
     columnsAdded: 0, columnsRemoved: 0, columnsMatched: 0,
-    typeChanges: 0, nullabilityChanges: 0, unitChanges: 0,
+    typeChanges: 0, nullabilityChanges: 0, unitChanges: 0, defaultChanges: 0,
   }
   const mode = policy.compatibility
 
@@ -805,6 +809,22 @@ function compareManifests(before, after, files, policy, limits) {
         }))
       }
     }
+
+    // hasDefault on a matched column. It changes no verdict in THIS comparison
+    // -- a reader in either direction still sees the column -- but it decides
+    // whether a later removal of this same column is compatible or breaking, so
+    // dropping it silently leaves "every difference is classified" false for the
+    // one field that flips that verdict.
+    if (old.hasDefault !== now.hasDefault) {
+      counts.defaultChanges += 1
+      findings.push(finding({
+        ruleId: 'column-default-changed',
+        file: files.after,
+        pointer,
+        message: `column ${JSON.stringify(excerpt(name, 60))} changed hasDefault from ${describeDefault(old.hasDefault)} to ${describeDefault(now.hasDefault)}; neither reader direction changes today, and removing this column later is compatible only while a default is declared`,
+        evidence: `hasDefault ${describeDefault(old.hasDefault)} -> ${describeDefault(now.hasDefault)}`,
+      }))
+    }
   }
 
   // Order is compared over the columns present in BOTH manifests, in the order
@@ -859,7 +879,10 @@ export async function diffSchemas(options = {}) {
   const files = { before: excerpt(before, LOCATION_LIMIT), after: excerpt(after, LOCATION_LIMIT) }
   const findings = []
   let diffAttempted = false
-  let counts = { columnsAdded: 0, columnsRemoved: 0, columnsMatched: 0, typeChanges: 0, nullabilityChanges: 0, unitChanges: 0 }
+  let counts = {
+    columnsAdded: 0, columnsRemoved: 0, columnsMatched: 0,
+    typeChanges: 0, nullabilityChanges: 0, unitChanges: 0, defaultChanges: 0,
+  }
   let orderChanged = false
   let columnsBefore = 0
   let columnsAfter = 0
@@ -936,6 +959,10 @@ export async function diffSchemas(options = {}) {
       typeChanges: counts.typeChanges,
       nullabilityChanges: counts.nullabilityChanges,
       unitChanges: counts.unitChanges,
+      // A hasDefault change on a column that exists in both manifests. It is
+      // counted separately because it changes no verdict here and decides one
+      // later.
+      defaultChanges: counts.defaultChanges,
       // Reported whatever the policy says, so that "columnOrder": "ignore"
       // suppresses the finding and never the fact.
       columnOrderChanged: orderChanged,
@@ -979,7 +1006,8 @@ export function formatReport(report) {
     )
     lines.push(
       `  ${summary.typeChanges} type change(s), ${summary.nullabilityChanges} nullability change(s), `
-      + `${summary.unitChanges} unit change(s); shared column order ${summary.columnOrderChanged ? 'changed' : 'unchanged'}`,
+      + `${summary.unitChanges} unit change(s), ${summary.defaultChanges} default change(s); `
+      + `shared column order ${summary.columnOrderChanged ? 'changed' : 'unchanged'}`,
     )
     lines.push(`  ${summary.columnsWithoutDeclaredUnit} column(s) in the newer manifest declare no unit, so nothing is known about their units`)
   } else {
