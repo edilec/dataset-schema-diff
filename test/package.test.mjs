@@ -8,8 +8,8 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { readdir, readFile, stat } from 'node:fs/promises'
+import { basename, join, relative } from 'node:path'
 import test from 'node:test'
 
 import { DEFAULT_LIMITS, RULE_CATALOG, TOOL_ID } from '../src/index.mjs'
@@ -111,12 +111,72 @@ test('the README carries the sections a reader needs', async () => {
   }
 })
 
-test('no file in the published tree names a person, a credential or a host', async () => {
-  // The catalogue rule: nothing that looks like a real record, anywhere.
-  const files = ['README.md', 'docs/rules.md', 'CHANGELOG.md', 'package.json']
-  for (const name of files) {
+/**
+ * Shapes that must not appear in anything this package publishes.
+ *
+ * None is global, so `exec` starts at the beginning every time. A failure names
+ * the file, the line and the shape -- never the text that matched, which for a
+ * credential would be the credential.
+ */
+const FORBIDDEN_SHAPES = Object.freeze({
+  'an access key': /AKIA[0-9A-Z]{16}/,
+  'a private key block': /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  'an email address': /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+  'an IPv4 address': /\b(?:\d{1,3}\.){3}\d{1,3}\b/,
+  'a path in somebody home directory': /\/(?:Users|home)\/[A-Za-z0-9._-]+/,
+  'an assigned secret': /\b(?:password|passwd|secret|api[_-]?key|token)\s*[:=]\s*["'][^"']+["']/i,
+})
+
+/**
+ * Every file `npm publish` would ship: each `files` entry expanded, plus
+ * `package.json`, which npm always includes whether it is listed or not.
+ */
+async function publishedFiles() {
+  const manifest = await readPackage()
+  const found = ['package.json']
+  for (const entry of manifest.files) {
+    const full = join(PROJECT, entry)
+    if ((await stat(full)).isDirectory()) {
+      for (const child of await readdir(full, { recursive: true, withFileTypes: true })) {
+        if (child.isFile()) found.push(relative(PROJECT, join(child.parentPath ?? child.path, child.name)))
+      }
+    } else {
+      found.push(entry)
+    }
+  }
+  return found.sort()
+}
+
+test('the published-tree walk reaches every file npm would ship', async () => {
+  // The companion to the scan below, and the reason it exists: the scan used to
+  // read four documentation files under a name that claimed the tree, and the
+  // one published file that would have tripped its own pattern was outside the
+  // loop. An absence assertion over a list needs the list pinned, or an empty
+  // walk passes it.
+  const files = await publishedFiles()
+  for (const required of [
+    'package.json', 'README.md', 'CHANGELOG.md', 'LICENSE',
+    'bin/dataset-schema-diff.mjs',
+    'src/index.mjs', 'src/text.mjs', 'src/types.mjs',
+    'docs/README.md', 'docs/rules.md',
+    // Two directories deep: a walk that stopped at the top level would pass
+    // every assertion above this one.
+    'examples/compatible/policy.json', 'examples/breaking/orders.2026-07.json',
+  ]) {
+    assert.ok(files.includes(required), `the published-tree walk missed ${required}`)
+  }
+  assert.equal(files.length, 15)
+})
+
+test('no file npm would publish carries a credential, an address or a host path', async () => {
+  // The catalogue rule: nothing that looks like a real record, anywhere in what
+  // ships -- source included, not only the documents.
+  for (const name of await publishedFiles()) {
     const text = await readProjectFile(name)
-    assert.ok(!/AKIA[0-9A-Z]{16}/.test(text), `${name} carries something shaped like a key`)
-    assert.ok(!/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text), `${name} carries a private key block`)
+    for (const [shape, pattern] of Object.entries(FORBIDDEN_SHAPES)) {
+      const hit = pattern.exec(text)
+      const where = hit === null ? '' : `:${text.slice(0, hit.index).split('\n').length}`
+      assert.equal(hit, null, `${name}${where} carries something shaped like ${shape}`)
+    }
   }
 })
