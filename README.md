@@ -169,9 +169,12 @@ configuration error — empty `stdout`, exit 2 — and not a report.
 
 ## Two values that read the same
 
-Every comparison in this tool asks how the two values will be **rendered in this
-report**, not whether the raw strings are equal. The difference matters for one
-case, and a plain trailing space is enough to reach it:
+Every comparison of a declared text value in this tool — the dataset name, and
+each column's name, type and unit — asks how the two values will be **rendered
+in this report**, not whether the raw strings are equal. (`sourceFormat` is the
+one text field compared raw, and it needs nothing else: it is held to a closed
+vocabulary, so two accepted values differ or they do not.) The difference
+matters for one case, and a plain trailing space is enough to reach it:
 
 ```
 before.json  { "name": "energy", "unit": "kWh" }
@@ -181,7 +184,7 @@ after.json   { "name": "energy", "unit": "kWh " }
 Comparing the raw strings and then rendering them produces
 
 ```
-ERROR  unit-changed-breaking  after.json/columns/1
+ERROR  unit-changed-breaking  after.json/columns/0
        column "energy" changed unit from kWh to kWh; the numbers mean
        something else now
        evidence: "kWh -> kWh"
@@ -192,7 +195,7 @@ can act on. What this tool reports instead names the difference by code point
 and says what it could not decide:
 
 ```
-ERROR  stripped-character-difference  after.json/columns/1/unit
+ERROR  stripped-character-difference  after.json/columns/0/unit
        the column unit reads "kWh" in both manifests and the two are not the
        same text: they differ only in characters this report strips (at
        character 4: before the end of the value, after U+0020), so this tool
