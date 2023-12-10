@@ -204,3 +204,50 @@ test('two column names in ONE manifest that render identically make the comparis
   assert.equal(report.summary.columnsMatched, 0)
   assert.equal(exitCodeFor(report), 2)
 })
+
+test('a column name differing by a bidi control is one column, not an addition and a removal', async () => {
+  // `trim()` keeps U+200E and `excerpt` removes it, so a comparison that trims
+  // instead of rendering matches the trailing-space cases above and misses this
+  // one. That is the contract's trim()-versus-sanitize() row, and it is why the
+  // name index is keyed by the rendered form rather than by a trimmed string.
+  const before = manifestDoc({ columns: [column({ name: 'energy' })] })
+  const after = manifestDoc({ version: '2026-04', columns: [column({ name: 'energy\u200e' })] })
+  const { root, before: beforeName, after: afterName } = await twoManifests(before, after)
+  const report = await diffSchemas({ root, before: beforeName, after: afterName })
+
+  assert.ok(!JSON.stringify(report).includes('was added'))
+  const found = onlyFinding(report, 'stripped-character-difference')
+  assert.deepEqual(found.location, { file: 'after.json', pointer: '/columns/0/name' })
+  assert.equal(found.evidence, 'at character 7: before the end of the value, after U+200E')
+  assert.equal(report.summary.columnsMatched, 1)
+  assert.equal(report.summary.columnsAdded, 0)
+  assert.equal(exitCodeFor(report), 2)
+})
+
+test('a unit differing by a bidi control is not reported as a changed unit', async () => {
+  const before = manifestDoc({ columns: [column({ name: 'energy', unit: 'kWh' })] })
+  const after = manifestDoc({ version: '2026-04', columns: [column({ name: 'energy', unit: 'kWh\u200e' })] })
+  const { root, before: beforeName, after: afterName } = await twoManifests(before, after)
+  const report = await diffSchemas({ root, before: beforeName, after: afterName })
+
+  assert.ok(!JSON.stringify(report).includes('changed unit from'))
+  const found = onlyFinding(report, 'stripped-character-difference')
+  assert.deepEqual(found.location, { file: 'after.json', pointer: '/columns/0/unit' })
+  assert.equal(found.evidence, 'at character 4: before the end of the value, after U+200E')
+  assert.equal(exitCodeFor(report), 2)
+})
+
+test('a dataset name differing by a C1 control is not two different datasets', async () => {
+  // U+0085 is NEL. `trim()` keeps it too, so this pins the dataset comparison
+  // against the same substitution.
+  const before = manifestDoc({ dataset: 'energy' })
+  const after = manifestDoc({ dataset: 'energy\u0085', version: '2026-04' })
+  const { root, before: beforeName, after: afterName } = await twoManifests(before, after)
+  const report = await diffSchemas({ root, before: beforeName, after: afterName })
+
+  assert.ok(!JSON.stringify(report).includes('name different datasets'))
+  const found = onlyFinding(report, 'stripped-character-difference')
+  assert.deepEqual(found.location, { file: 'after.json', pointer: '/dataset' })
+  assert.equal(found.evidence, 'at character 7: before the end of the value, after U+0085')
+  assert.equal(exitCodeFor(report), 2)
+})
