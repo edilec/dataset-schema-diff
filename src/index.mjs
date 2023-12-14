@@ -530,16 +530,26 @@ function validateManifest(document, file, limits) {
     // other on the page. The raw name is kept beside the key so the difference
     // itself can still be reported.
     const key = excerpt(raw.name, limits.maxFieldLength)
-    if (index.has(key)) {
+    const first = index.get(key)
+    if (first !== undefined) {
       // A duplicate name makes the by-name index ambiguous. Keeping the last
       // entry would silently drop the first and then compare against a schema
       // this manifest does not describe. Two names that render the same are
       // ambiguous in exactly the same way: nothing in the report could tell a
       // reader which of the two a finding is about.
+      //
+      // Which of the two it is, is known here, so it is said here. "Declared
+      // twice, or declared twice in forms that render identically" hands the
+      // reader the question instead of the answer, and the whole point of
+      // comparing rendered values is to say WHICH difference a difference is.
+      const declaredTwice = first.declaredName === raw.name
       add({
         ruleId: 'column-name-duplicate',
         pointer,
-        message: `the column name ${JSON.stringify(excerpt(raw.name, 60))} is declared more than once, or is declared twice in forms this report renders identically, so a comparison by name is ambiguous`,
+        message: declaredTwice
+          ? `the column name ${JSON.stringify(excerpt(raw.name, 60))} is declared twice, here and at /columns/${first.position}, so a comparison by name is ambiguous`
+          : `the column name ${JSON.stringify(excerpt(raw.name, 60))} is declared at /columns/${first.position} in text that is not the same and that this report renders identically (${describeCharacterDifference(first.declaredName, raw.name)}), so a comparison by name is ambiguous`,
+        evidence: declaredTwice ? undefined : describeCharacterDifference(first.declaredName, raw.name),
       })
       continue
     }

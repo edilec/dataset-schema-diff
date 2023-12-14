@@ -123,6 +123,12 @@ test('a duplicate column name makes the comparison ambiguous, and no addition is
   assert.equal(report.summary.diffAttempted, false)
   assert.equal(report.summary.columnsAdded, 0)
   assert.equal(report.findings.filter((item) => item.ruleId.startsWith('column-added')).length, 0)
+
+  // The literal repeat, said as a literal repeat: the same text at two
+  // positions, with no character difference to describe and so no evidence.
+  const found = report.findings.find((item) => item.ruleId === 'column-name-duplicate')
+  assert.match(found.message, /is declared twice, here and at \/columns\/0/)
+  assert.equal(found.evidence, undefined)
 })
 
 test('a column the tool could not read is not put into the index under its name', async () => {

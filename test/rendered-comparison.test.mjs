@@ -198,6 +198,10 @@ test('two column names in ONE manifest that render identically make the comparis
 
   const found = onlyFinding(report, 'column-name-duplicate')
   assert.deepEqual(found.location, { file: 'after.json', pointer: '/columns/1' })
+  // And it says WHICH kind of duplicate this is. "Declared twice, or declared
+  // twice in forms that render identically" would hand the reader the question.
+  assert.match(found.message, /declared at \/columns\/0 in text that is not the same and that this report renders identically/)
+  assert.equal(found.evidence, 'at character 7: before the end of the value, after U+0020')
   // Nothing is asserted about the columns of a manifest that could not be read.
   assert.equal(report.summary.diffAttempted, false)
   assert.equal(report.summary.columnsAdded, 0)
