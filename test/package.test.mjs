@@ -147,12 +147,17 @@ async function publishedFiles() {
   return found.sort()
 }
 
-test('the published-tree walk reaches every file npm would ship', async () => {
+test('the published-tree walk reaches every file the package manifest ships', async () => {
   // The companion to the scan below, and the reason it exists: the scan used to
   // read four documentation files under a name that claimed the tree, and the
   // one published file that would have tripped its own pattern was outside the
   // loop. An absence assertion over a list needs the list pinned, or an empty
   // walk passes it.
+  //
+  // The list this walk produces was compared against `npm pack --dry-run` at
+  // this commit -- both name the same fifteen files -- and the count below is
+  // the tripwire that makes the next addition re-check that rather than assume
+  // it.
   const files = await publishedFiles()
   for (const required of [
     'package.json', 'README.md', 'CHANGELOG.md', 'LICENSE',

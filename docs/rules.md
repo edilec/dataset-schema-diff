@@ -49,8 +49,9 @@ controls, then collapses whitespace runs and trims. So two values can be
 different text and reach a reader as the same characters — `"kWh"` and
 `"kWh "` are the emblem, and no control character is needed.
 
-Every comparison here is made on the rendered form, and a pair that is not the
-same text but renders identically gets `stripped-character-difference`: the
+Every comparison of a declared text value here is made on the rendered form,
+and a pair that is not the same text but renders identically gets
+`stripped-character-difference`: the
 message names where they differ by code point, and the run is `incomplete`
 because whether that character is significant is a fact about the producer that
 the documents do not carry. Comparing the raw strings and rendering the message
