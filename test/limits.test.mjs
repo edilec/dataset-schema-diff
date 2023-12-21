@@ -207,3 +207,74 @@ test('the CLI wires every limit flag through to the engine', async () => {
   assert.equal(fires.code, 2)
   assert.equal(JSON.parse(fires.stdout).findings[0].ruleId, 'too-many-columns')
 })
+
+test('a limit of exactly 1 is legal, and 0 is not', async () => {
+  // `value < 1` guards the limit VALUES, and only its firing side was driven.
+  // Widening it to `value <= 1`, or to `value < 2`, refuses a limit of 1 -- a
+  // value the message itself calls positive -- with the whole suite green.
+  const root = await makeRoot()
+  await writeDocument(root, 'before.json', manifestDoc({ columns: [column({ name: 'a', type: 'int64' })] }))
+  await writeDocument(root, 'after.json', manifestDoc({ columns: [column({ name: 'a', type: 'int32' })] }))
+  const documents = { root, before: 'before.json', after: 'after.json' }
+
+  for (const key of Object.keys(DEFAULT_LIMITS)) {
+    const report = await diffSchemas({ ...documents, limits: { [key]: 1 } })
+    assert.equal(report.schemaVersion, '1', `a limit of 1 was refused for ${key}`)
+    await assert.rejects(
+      diffSchemas({ ...documents, limits: { [key]: 0 } }),
+      (error) => error instanceof ConfigError && /must be a positive integer/.test(error.message),
+      `0 was accepted for ${key}`,
+    )
+  }
+
+  // And 1 is not merely accepted, it is enforced as 1: one column is exactly
+  // the column limit, so the manifests are still compared.
+  const columnsAtOne = await diffSchemas({ ...documents, limits: { maxColumns: 1 } })
+  assert.equal(columnsAtOne.summary.diffAttempted, true)
+  assert.deepEqual(columnsAtOne.findings.map((item) => item.ruleId), ['type-narrowed-breaking'])
+})
+
+test('maxFindings: a limit of exactly 1 truncates to the marker alone and still counts', async () => {
+  const root = await makeRoot()
+  const columns = (type) => [column({ name: 'a', type }), column({ name: 'b', type })]
+  await writeDocument(root, 'before.json', manifestDoc({ columns: columns('int64') }))
+  await writeDocument(root, 'after.json', manifestDoc({ columns: columns('int32') }))
+
+  const report = await diffSchemas({ root, before: 'before.json', after: 'after.json', limits: { maxFindings: 1 } })
+
+  assert.deepEqual(report.findings.map((item) => item.ruleId), ['too-many-findings'])
+  assert.equal(report.summary.errors, 2, 'the count still says how many there were')
+  assert.equal(exitCodeFor(report), 2)
+})
+
+test('maxDocumentBytes: a policy document of exactly the limit is read, one byte over is refused', async () => {
+  // The policy document is held to the same byte bound and neither side of it
+  // was driven: tightening the comparison refuses a legal policy, and loosening
+  // it by one accepts an illegal one, both with the suite green.
+  const body = '{"policyVersion":"1","compatibility":"forward","columnOrder":"ignore"}'
+  const pad = (bytes) => body + ' '.repeat(bytes - body.length)
+  const root = await makeRoot()
+  const document = manifestDoc()
+  await writeDocument(root, 'before.json', document)
+  await writeDocument(root, 'after.json', document)
+
+  const exact = pad(DEFAULT_LIMITS.maxDocumentBytes)
+  assert.equal(Buffer.byteLength(exact), DEFAULT_LIMITS.maxDocumentBytes)
+  await writeDocument(root, 'exact.json', exact)
+  const atTheLimit = await runCli([
+    '--root', root, '--before', 'before.json', '--after', 'after.json', '--policy', join(root, 'exact.json'), '--json',
+  ])
+  assert.equal(atTheLimit.code, 0)
+  // The padded document was really read: the policy it declares is the one the
+  // report says it was judged against, not the default.
+  assert.deepEqual(JSON.parse(atTheLimit.stdout).summary.policy, { compatibility: 'forward', columnOrder: 'ignore' })
+
+  await writeDocument(root, 'over.json', pad(DEFAULT_LIMITS.maxDocumentBytes + 1))
+  const overTheLimit = await runCli([
+    '--root', root, '--before', 'before.json', '--after', 'after.json', '--policy', join(root, 'over.json'), '--json',
+  ])
+  // A policy is configuration, so this is the empty-stdout shape.
+  assert.equal(overTheLimit.code, 2)
+  assert.equal(overTheLimit.stdout, '')
+  assert.match(overTheLimit.stderr, /--policy is larger than 1048576 bytes/)
+})

@@ -132,7 +132,15 @@ test('a column whose name renders empty makes the run incomplete', async () => {
 test('excerpt bounds what it renders and reports the truncation', () => {
   assert.equal(excerpt('x'.repeat(10), 5), 'xxxxx...')
   assert.equal(excerpt('x'.repeat(5), 5), 'xxxxx')
+  // Both sides of the truncation comparison. Ten characters is well over the
+  // limit and five is well under it; the value that decides `<=` from `<` is
+  // the one exactly one over, and nothing drove it.
+  assert.equal(excerpt('x'.repeat(6), 5), 'xxxxx...')
+  // And both sides of the limit's own bound: 1 is a positive integer.
+  assert.equal(excerpt('xy', 1), 'x...')
+  assert.equal(excerpt('x', 1), 'x')
   assert.throws(() => excerpt('x', 0), TypeError)
+  assert.throws(() => excerpt('x', 1.5), TypeError)
 })
 
 test('compareAsRendered separates a real change from one the report cannot show', () => {
