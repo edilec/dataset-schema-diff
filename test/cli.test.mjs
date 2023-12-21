@@ -8,6 +8,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { ConfigError, diffSchemas } from '../src/index.mjs'
+
 import { column, makeRoot, manifestDoc, runCli, twoManifests, writeDocument } from './support.mjs'
 
 test('--help explains the tool and exits 0', async () => {
@@ -163,4 +165,17 @@ test('a location never carries an absolute host path', async () => {
     assert.ok(!item.location.file.startsWith('/'), `${item.location.file} is an absolute path`)
     assert.ok(!item.location.file.includes(root))
   }
+})
+
+test('exactly one unknown option in a library call is refused', async () => {
+  // `unknownKeys.length > 0`: loosening it by one lets a single unknown key
+  // through, and every test that had unknown keys had more than one. One typo
+  // is the realistic case, and ignoring it is how a documented limit becomes a
+  // limit nobody enforces.
+  const { root, before, after } = await twoManifests(manifestDoc(), manifestDoc())
+
+  await assert.rejects(
+    diffSchemas({ root, before, after, maxColumns: 5 }),
+    (error) => error instanceof ConfigError && /Unknown option "maxColumns"/.test(error.message),
+  )
 })
