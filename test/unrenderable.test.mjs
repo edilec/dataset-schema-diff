@@ -15,12 +15,31 @@ import { diffSchemas, renderable } from '../src/index.mjs'
 import { makeRoot, manifestDoc, runCli, writeDocument } from './support.mjs'
 
 const UNRENDERABLE = '{"toString": {}}'
+/** The same shape inside an array: `join` renders each element, so this throws too. */
+const UNRENDERABLE_ARRAY = '[{"toString": {}}]'
 
 test('String() really does throw for this shape, so the guard is not theoretical', () => {
   assert.throws(() => String(JSON.parse(UNRENDERABLE)), TypeError)
   assert.equal(renderable(JSON.parse(UNRENDERABLE)), '[object]')
   assert.equal(renderable([1, 2]), '1,2')
   assert.equal(renderable(null), 'null')
+  // The array branch of the fallback. An array that renders is rendered; one
+  // that cannot is described AS an array, and calling it "[object]" would tell
+  // a reader the wrong thing about their document.
+  assert.throws(() => String(JSON.parse(UNRENDERABLE_ARRAY)), TypeError)
+  assert.equal(renderable(JSON.parse(UNRENDERABLE_ARRAY)), '[array]')
+})
+
+test('an unrenderable array reaches the report described as an array', async () => {
+  const root = await makeRoot()
+  await writeDocument(root, 'before.json', `{"manifestVersion": ${UNRENDERABLE_ARRAY}, "dataset": "d", "version": "1", "sourceFormat": "csv", "columns": []}`)
+  await writeDocument(root, 'after.json', manifestDoc())
+
+  const report = await diffSchemas({ root, before: 'before.json', after: 'after.json' })
+
+  const found = report.findings.find((item) => item.ruleId === 'manifest-version-unsupported')
+  assert.match(found.message, /this document declares "\[array\]"/)
+  assert.equal(report.status, 'incomplete')
 })
 
 for (const [label, document] of [

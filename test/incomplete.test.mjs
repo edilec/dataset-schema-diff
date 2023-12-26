@@ -185,6 +185,12 @@ test('a manifest that is not a JSON object is incomplete', async () => {
   const report = await diffSchemas({ root, before: 'before.json', after: 'after.json' })
 
   assertIncomplete(report, 'manifest-invalid')
+  // `manifest-invalid` is produced at six sites, so asking whether the list
+  // includes it is satisfied by five of the others. Removing the shape guard
+  // walks the array as an object and produces five findings, all of them the
+  // wrong answer, and this test passed through that.
+  assert.deepEqual(report.findings.map((item) => item.ruleId), ['manifest-invalid'])
+  assert.equal(report.findings[0].message, 'the manifest must be a JSON object')
 })
 
 test('an unsupported manifest version is incomplete rather than read anyway', async () => {
