@@ -96,3 +96,22 @@ test('classification is symmetric: reversing the pair reverses the verdict', () 
     assert.equal(classifyTypeChange(to, from), 'narrowed')
   }
 })
+
+test('a known base with the wrong number of parameters is unclassified, never measured', () => {
+  // `varchar(5,5)` names a base this tool knows with an arity it does not, so
+  // the type is UNKNOWN, not a varchar of length 5. Dropping the known check
+  // reads its first parameter anyway and answers "narrowed" -- a measurement
+  // taken from a declaration the tool could not parse.
+  assert.equal(classifyTypeChange('varchar(10)', 'varchar(5,5)'), 'unclassified')
+  assert.equal(classifyTypeChange('varchar(5,5)', 'varchar(10)'), 'unclassified')
+  assert.equal(parseType('varchar(5,5)').known, false)
+  assert.equal(parseType('varchar(5,5)').base, 'varchar')
+
+  assert.equal(classifyTypeChange('decimal(10,2)', 'decimal(4)'), 'unclassified')
+  assert.equal(classifyTypeChange('decimal(4)', 'decimal(10,2)'), 'unclassified')
+  assert.equal(parseType('decimal(4)').known, false)
+
+  // The other side: the right arity is still measured.
+  assert.equal(classifyTypeChange('varchar(10)', 'varchar(20)'), 'widened')
+  assert.equal(classifyTypeChange('decimal(10,2)', 'decimal(18,2)'), 'widened')
+})
