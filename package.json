@@ -1,0 +1,51 @@
+{
+  "name": "dataset-schema-diff",
+  "version": "0.1.0",
+  "description": "Compare two versioned schema manifests -- columns, types, nullability and units -- and classify every difference under a declared compatibility policy, reporting the ones it cannot classify instead of guessing.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "for file in bin/*.mjs src/*.mjs test/*.mjs; do node --check \"$file\" || exit 1; done",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=src/**",
+    "example": "node bin/dataset-schema-diff.mjs --root examples/compatible --before orders.2026-01.json --after orders.2026-04.json --policy examples/compatible/policy.json",
+    "example:failing": "node bin/dataset-schema-diff.mjs --root examples/breaking --before orders.2026-04.json --after orders.2026-07.json --column-order breaking; test $? -eq 1",
+    "pack:check": "npm pack --dry-run",
+    "check": "npm run lint && npm test && npm run example && npm run example:failing && npm run pack:check"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edilec/dataset-schema-diff.git"
+  },
+  "bin": {
+    "dataset-schema-diff": "./bin/dataset-schema-diff.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "schema",
+    "diff",
+    "compatibility",
+    "data-contract",
+    "static-analysis",
+    "cli"
+  ],
+  "author": "Edilec Private Limited",
+  "bugs": {
+    "url": "https://github.com/edilec/dataset-schema-diff/issues"
+  },
+  "homepage": "https://github.com/edilec/dataset-schema-diff#readme"
+}

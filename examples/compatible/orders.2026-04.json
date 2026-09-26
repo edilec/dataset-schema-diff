@@ -1,0 +1,13 @@
+{
+  "manifestVersion": "1",
+  "dataset": "orders",
+  "version": "2026-04",
+  "sourceFormat": "csv",
+  "columns": [
+    { "name": "order_id", "type": "int64", "nullable": false, "hasDefault": false },
+    { "name": "placed_on", "type": "date", "nullable": false, "hasDefault": false },
+    { "name": "net_amount", "type": "decimal(12,2)", "nullable": false, "unit": "EUR", "hasDefault": false },
+    { "name": "note", "type": "varchar(120)", "nullable": true },
+    { "name": "channel", "type": "varchar(20)", "nullable": true, "description": "where the order came from" }
+  ]
+}
