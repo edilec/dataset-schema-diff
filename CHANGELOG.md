@@ -7,7 +7,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 A rule id is part of the public interface: renaming one is a breaking change and
 is recorded here.
 
-## [0.1.0] - 2026-09-19
+## [0.1.0] - 2026-09-28
 
 ### Added
 

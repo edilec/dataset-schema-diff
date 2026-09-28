@@ -37,11 +37,18 @@ documents.
 It writes nothing. There is no `--out`, it creates no directory and it modifies
 no file, so no destination check applies to it.
 
+For the wider producer-and-consumer review, see Edilec's [data contract
+compatibility guide](https://edilec.com/blog/datana-11008/test-data-contract-compatibility-before-merge/).
+This CLI compares declared local manifests; it does not test actual consumer
+code or enforce a registry's format-specific compatibility rules.
+
 ## Quick start
+
+From a checkout of this repository with Node.js 22 or newer:
 
 ```sh
 # A compatible change: widened types and an added nullable column.
-npx dataset-schema-diff \
+node bin/dataset-schema-diff.mjs \
   --root examples/compatible \
   --before orders.2026-01.json \
   --after  orders.2026-04.json \
@@ -50,13 +57,16 @@ npx dataset-schema-diff \
 
 # A breaking change: a narrowed key, a tightened column, a changed unit and a
 # reordering, judged against a policy that calls reordering breaking.
-npx dataset-schema-diff \
+node bin/dataset-schema-diff.mjs \
   --root examples/breaking \
   --before orders.2026-04.json \
   --after  orders.2026-07.json \
   --column-order breaking
 # exit 1
 ```
+
+To run the CLI from its public GitHub source without installing a registry
+package, use `npm exec --yes --package=git+https://github.com/edilec/dataset-schema-diff.git -- dataset-schema-diff --help`.
 
 `stdout` carries the JSON report and nothing else, so it pipes straight into a
 parser. `stderr` carries the human summary; `--json` silences it.
